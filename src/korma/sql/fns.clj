@@ -13,6 +13,8 @@
 (defn pred-in [k v] (infix k "IN" v))
 (defn pred-> [k v] (infix k ">" v))
 (defn pred-< [k v] (infix k "<" v))
+(defn pred-between [k from to]
+  (infix k "BETWEEN" (group-with " AND " [from to])))
 (defn pred->= [k v] (infix k ">=" v))
 (defn pred-<= [k v] (infix k "<=" v))
 (defn pred-like [k v] (infix k "LIKE" v))
