@@ -180,11 +180,15 @@
   with keywords used to reference fields.
   e.g. (where query (or (= :hits 1) (> :hits 5)))
 
-  Available predicates: and, or, =, not=, <, >, <=, >=, in, between, like, not
+  Available predicates: and, or, =, not=, <, >, <=, >=, in, between, between!, like, not
+
+  There's no standard for the clusivity of the SQL BETWEEN operator, so two predicates
+  are provided for the inclusive and exclusive forms.
+  e.g. (between :age [20 25]) is equivalent to (between! :age [19 26])
 
   Where can also take a map at any point and will create a clause that compares keys
   to values. The value can be a vector with one of the above predicate functions 
-  describing how the key is related to the value: (where query {:name [like \"chris\"})"
+  describing how the key is related to the value: (where query {:name [like \"chris\"]})"
   [query form]
   `(let [q# ~query]
      (where* q# 
