@@ -5,7 +5,8 @@
             [clojure.set :as set]
             [korma.db :as db])
   (:use [korma.sql.engine :only [bind-query bind-params]]
-        [clojure.walk :only [postwalk-replace]]))
+        [clojure.walk :only [postwalk-replace]]
+        [clojure.string :only [split]]))
 
 (def ^{:dynamic true} *exec-mode* false)
 (declare get-rel)
@@ -535,17 +536,11 @@
   [ent]
   (let [aliases (:aliases ent)
         fields (map
-                (fn [field]
-                  (keyword
-                   (apply str
-                          (butlast
-                           (rest
-                            (second
-                             (clojure.string/split field
-                                                   #"\.")))))))
+                #(if (string? %)
+                   (keyword (last (split % #"\""))) %)
                 (:fields ent))]
-    (if fields
-      (apply (partial entity-fields (dissoc ent :fields)) fields))))
+    (if-not (empty? fields)
+      (apply entity-fields (dissoc ent :fields) fields))))
 
 (defn aliases
   "Set the default field aliases for the entity. If set, alias names can be used in
