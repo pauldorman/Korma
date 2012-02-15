@@ -534,15 +534,16 @@
 (defn realias-fields
   [ent]
   (let [aliases (:aliases ent)
-        fields (map (fn [field]
-                      (keyword
-                       (apply str
-                              (butlast
-                               (rest
-                                (second
-                                 (clojure.string/split field
-                                                       #"\.")))))))
-                    (:fields ent))]
+        fields (map
+                (fn [field]
+                  (keyword
+                   (apply str
+                          (butlast
+                           (rest
+                            (second
+                             (clojure.string/split field
+                                                   #"\.")))))))
+                (:fields ent))]
     (if fields
       (apply (partial entity-fields (dissoc ent :fields)) fields))))
 
