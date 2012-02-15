@@ -508,14 +508,12 @@
   [ent sub-ent & [opts]]
   `(rel ~ent (var ~sub-ent) :has-many ~opts))
 
-(defn aliases
-  "Set the default field aliases for the entity. If set, alias names can be used in
-   place of actual field names. Aliases can be overridden in select queries with field
-   alias vectors, and cannot be used in raw SQL queries.
-
-   The alias map takes the form {:alias :field}."
-  [ent m]
-  (update-in ent [:aliases] merge m))
+(defn pk
+  "Set the primary key used for an entity. :id by default."
+  [ent pk]
+  (let [aliases (:aliases ent)
+        pk (keyword pk)]
+    (assoc ent :pk (or (pk aliases) pk))))
 
 (defn entity-fields
   "Set the fields to be retrieved by default in select queries for the
@@ -525,6 +523,41 @@
     (update-in ent [:fields]
                concat (map #(eng/prefix ent %)
                            (postwalk-replace aliases fields)))))
+
+(defn realias-pk
+  [ent]
+  (let [aliases (:aliases ent)]
+    (if-let [primary-key (:pk ent)]
+      (-> ent (pk (or (:pk aliases) primary-key)))
+      ent)))
+
+(defn realias-fields
+  [ent]
+  (let [aliases (:aliases ent)
+        fields (map (fn [field]
+                      (keyword
+                       (apply str
+                              (butlast
+                               (rest
+                                (second
+                                 (clojure.string/split field
+                                                       #"\.")))))))
+                    (:fields ent))]
+    (if fields
+      (apply (partial entity-fields (dissoc ent :fields)) fields))))
+
+(defn aliases
+  "Set the default field aliases for the entity. If set, alias names can be used in
+   place of actual field names. Aliases can be overridden in select queries with field
+   alias vectors, and cannot be used in raw SQL queries.
+
+   The alias map takes the form {:alias :field}."
+  [ent m]
+  (let [pk (:pk ent)]
+    (-> ent
+        (update-in [:aliases] merge m)
+        realias-pk
+        realias-fields)))
 
 (defn table
   "Set the name of the table and an optional alias to be used for the entity. 
@@ -540,13 +573,6 @@
     (if alias
       (assoc ent :alias (name alias))
       ent)))
-
-(defn pk
-  "Set the primary key used for an entity. :id by default."
-  [ent pk]
-  (let [aliases (:aliases ent)
-        pk (keyword pk)]
-    (assoc ent :pk (or (pk aliases) pk))))
 
 (defn database
   "Set the database connection to be used for this entity."
