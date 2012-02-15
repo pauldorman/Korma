@@ -553,11 +553,10 @@
 
    The alias map takes the form {:alias :field}."
   [ent m]
-  (let [pk (:pk ent)]
-    (-> ent
-        (update-in [:aliases] merge m)
-        realias-pk
-        realias-fields)))
+  (-> ent
+      (update-in [:aliases] merge m)
+      realias-pk
+      realias-fields))
 
 (defn table
   "Set the name of the table and an optional alias to be used for the entity. 
