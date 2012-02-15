@@ -175,7 +175,7 @@
     (is (= (select users (group :id :name))
            "SELECT \"users\".* FROM \"users\" GROUP BY \"users\".\"id\", \"users\".\"name\""))
     (is (= (select users (aggregate (count :*) :cnt :id))
-           "SELECT COUNT(\"users\".*) \"cnt\" FROM \"users\" GROUP BY \"users\".\"id\""))))
+           "SELECT COUNT(\"users\".*) FROM \"users\" GROUP BY \"users\".\"id\""))))
 
 (deftest quoting
   (sql-only
@@ -319,7 +319,7 @@
              (aggregate (max :date_created) :end_date)
              (where {:id [in [1 2 3]]})
              (exec)))
-         "SELECT MIN(\"the_table\".\"date_created\") \"start_date\", MAX(\"the_table\".\"date_created\") \"end_date\" FROM \"the_table\" WHERE (\"the_table\".\"id\" IN (?, ?, ?))")))
+         "SELECT MIN(\"the_table\".\"date_created\"), MAX(\"the_table\".\"date_created\") FROM \"the_table\" WHERE (\"the_table\".\"id\" IN (?, ?, ?))")))
 
 (deftest subselect-table-prefix
   (defentity first_table)

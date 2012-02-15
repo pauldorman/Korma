@@ -4,7 +4,8 @@
             [korma.sql.utils :as utils]
             [clojure.set :as set]
             [korma.db :as db])
-  (:use [korma.sql.engine :only [bind-query bind-params]]))
+  (:use [korma.sql.engine :only [bind-query bind-params]]
+        [clojure.walk :only [postwalk-replace]]))
 
 (def ^{:dynamic true} *exec-mode* false)
 (declare get-rel)
@@ -46,7 +47,6 @@
                 :joins []
                 :where []
                 :order []
-                :aliases #{}
                 :group []
                 :results :results}))))
 
@@ -139,8 +139,36 @@
 ;; Query parts
 ;;*****************************************************
 
-(defn- add-aliases [query as]
-  (update-in query [:aliases] set/union as))
+(defn unalias-form
+  [form query-or-ent]
+  (let [aliases (or (-> query-or-ent :ent :aliases)
+                    (:aliases query-or-ent))]
+    (postwalk-replace aliases form)))
+
+(defn- unalias-field
+  [field aliases]
+  (cond (map? field) (or (field aliases) field)
+        (coll? field) (or ((second field) aliases) (first field))
+        :default field))
+
+(defn- unalias-fields
+  [query]
+  (let [fields (-> query :fields)
+        aliases (postwalk-replace
+                 (into {} (filter coll? fields))
+                 (-> query :ent :aliases))]
+    (if (and fields (not-empty aliases))
+      (-> query
+          (assoc-in [:ent :aliases] aliases)
+          (assoc-in [:fields] (map #(unalias-field % aliases) fields)))
+      query)))
+
+(defn- alias-results
+  [query results]
+  (if (and (= (:type query) :select)
+           (not (empty? results)))
+    (let [aliases (-> query :ent :aliases)]
+      (map #(postwalk-replace % aliases) results))))
 
 (defn- update-fields [query fs]
   (let [[first-cur] (:fields query)]
@@ -153,16 +181,13 @@
   or a vector of two keywords [field alias]:
   
   (fields query :name [:firstname :first])"
-  [query & vs] 
-  (let [aliases (set (map second (filter coll? vs)))]
-    (-> query
-        (add-aliases aliases)
-        (update-fields vs))))
+  [query & vs]
+  (-> query (update-fields vs) unalias-fields))
 
 (defn set-fields
   "Set the fields and values for an update query."
   [query fields-map]
-  (update-in query [:set-fields] merge fields-map))
+  (update-in query [:set-fields] merge (unalias-form fields-map query)))
 
 (defn from
   "Add tables to the from clause."
@@ -190,7 +215,8 @@
      (where* q# 
              (bind-query q#
                          (eng/pred-map
-                           ~(eng/parse-where `~form))))))
+                          ~(eng/parse-where
+                            `(unalias-form ~form ~query)))))))
 
 (defn order
   "Add an ORDER BY clause to a select query. field should be a keyword of the field name, dir
@@ -198,7 +224,8 @@
   
   (order query :created :asc)"
   [query field & [dir]]
-  (update-in query [:order] conj [field (or dir :ASC)]))
+  (update-in query [:order]
+             conj [(unalias-form field query) (or dir :ASC)]))
 
 (defn values
   "Add records to an insert clause. values can either be a vector of maps or a single
@@ -206,9 +233,10 @@
   
   (values query [{:name \"john\"} {:name \"ed\"}])"
   [query values]
-  (update-in query [:values] concat (if (map? values)
-                                      [values]
-                                      values)))
+  (let [values (unalias-form values query)]
+    (update-in query [:values] concat (if (map? values)
+                                        [values]
+                                        values))))
 
 (defn join* [query type table clause]
   (update-in query [:joins] conj [type table clause]))
@@ -218,7 +246,7 @@
   to join on.
   
   (join query addresses)
-  (join query addresses (= :addres.users_id :users.id))
+  (join query addresses (= :address.users_id :users.id))
   (join query :right addresses (= :address.users_id :users.id))"
   ([query ent]
    `(let [q# ~query
@@ -249,7 +277,14 @@
 (defn group
   "Add a group-by clause to a select query"
   [query & fields]
-  (update-in query [:group] concat fields))
+  (update-in query [:group] concat (unalias-form fields query)))
+
+(defn- aggregate-field
+  "Determines field name for the given aggregate form."
+  [form]
+  (if (coll? form)
+    (keyword (first form))
+    (keyword form)))
 
 (defmacro aggregate
   "Use a SQL aggregator function, aliasing the results, and optionally grouping by
@@ -260,12 +295,17 @@
   
   Aggregates available: count, sum, avg, min, max, first, last"
   [query agg alias & [group-by]]
-  `(let [q# ~query]
+  `(let [q# ~query
+         f# ~(aggregate-field agg)
+         a# ~alias]
      (bind-query q#
-               (let [res# (fields q# [~(eng/parse-aggregate agg) ~alias])]
-                 (if ~group-by
-                   (group res# ~group-by)
-                   res#)))))
+                 (let [alias# {a# f#}
+                       res# (-> q#
+                                (fields ~(eng/parse-aggregate agg))
+                                (update-in [:ent :aliases] merge alias#))]
+                   (if ~group-by
+                     (group res# ~group-by)
+                     res#)))))
 
 ;;*****************************************************
 ;; Other sql
@@ -351,7 +391,7 @@
 (defn exec
   "Execute a query map and return the results."
   [query]
-  (let [query (apply-prepares query)
+  (let [query (-> query unalias-fields apply-prepares)
         query (bind-query query (eng/->sql query))
         sql (:sql-str query)
         params (:params query)]
@@ -365,7 +405,7 @@
                                        results (apply-posts query [{pk 1}])]
                                    (first results)
                                    results))
-      :else (let [results (db/do-query query)]
+      :else (let [results (alias-results query (db/do-query query))]
               (apply-transforms query (apply-posts query results))))))
 
 (defn exec-raw
@@ -396,6 +436,7 @@
    :transforms '()
    :prepares '()
    :fields []
+   :aliases {}
    :rel {}}) 
 
 (defn create-relation
@@ -466,11 +507,23 @@
   [ent sub-ent & [opts]]
   `(rel ~ent (var ~sub-ent) :has-many ~opts))
 
+(defn aliases
+  "Set the default field aliases for the entity. If set, alias names can be used in
+   place of actual field names. Aliases can be overridden in select queries with field
+   alias vectors, and cannot be used in raw SQL queries.
+
+   The alias map takes the form {:alias :field}."
+  [ent m]
+  (update-in ent [:aliases] merge m))
+
 (defn entity-fields
   "Set the fields to be retrieved by default in select queries for the
   entity."
   [ent & fields]
-  (update-in ent [:fields] concat (map #(eng/prefix ent %) fields)))
+  (let [aliases (:aliases ent)]
+    (update-in ent [:fields]
+               concat (map #(eng/prefix ent %)
+                           (postwalk-replace aliases fields)))))
 
 (defn table
   "Set the name of the table and an optional alias to be used for the entity. 
@@ -490,7 +543,9 @@
 (defn pk
   "Set the primary key used for an entity. :id by default."
   [ent pk]
-  (assoc ent :pk (keyword pk)))
+  (let [aliases (:aliases ent)
+        pk (keyword pk)]
+    (assoc ent :pk (or (pk aliases) pk))))
 
 (defn database
   "Set the database connection to be used for this entity."
@@ -531,11 +586,9 @@
                           %)))
 
 (defn- merge-query [query neue]
-  (let [merged (reduce #(merge-part % neue %2)
-                       query
-                       [:fields :group :order :where :params :joins :post-queries])]
-    (-> merged
-        (add-aliases (:aliases neue)))))
+  (reduce #(merge-part % neue %2)
+          query
+          [:fields :group :order :where :params :joins :post-queries]))
 
 (defn- sub-query [query sub-ent func]
   (let [neue (select* sub-ent)
