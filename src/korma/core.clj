@@ -147,7 +147,8 @@
 
 (defn- unalias-field
   [field aliases]
-  (cond (map? field) (or (field aliases) field)
+  (cond (keyword? field) (or (field aliases) field)
+        (map? field) field
         (coll? field) (or ((second field) aliases) (first field))
         :default field))
 
