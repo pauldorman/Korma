@@ -554,8 +554,7 @@
   (-> ent
       (update-in [:aliases] merge m)
       realias-pk
-      ;realias-fields
-      ))
+      realias-fields))
 
 (defn table
   "Set the name of the table and an optional alias to be used for the entity. 
