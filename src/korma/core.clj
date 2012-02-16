@@ -540,7 +540,8 @@
                    (keyword (last (split % #"\""))) %)
                 (:fields ent))]
     (if-not (empty? fields)
-      (apply entity-fields (dissoc ent :fields) fields))))
+      (apply entity-fields (dissoc ent :fields) fields)
+      ent)))
 
 (defn aliases
   "Set the default field aliases for the entity. If set, alias names can be used in
@@ -552,7 +553,8 @@
   (-> ent
       (update-in [:aliases] merge m)
       realias-pk
-      realias-fields))
+      ;realias-fields
+      ))
 
 (defn table
   "Set the name of the table and an optional alias to be used for the entity. 
