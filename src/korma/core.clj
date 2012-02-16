@@ -169,7 +169,8 @@
   [query results]
   (if (and (= (:type query) :select)
            (not (empty? results)))
-    (let [aliases (-> query :ent :aliases)]
+    (let [aliases (into {} (for [field (:fields query)]
+                             [(field (-> query :ent :aliases)) field]))]
       (map #(postwalk-replace aliases %) results))))
 
 (defn- update-fields [query fs]
