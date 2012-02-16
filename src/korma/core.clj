@@ -169,9 +169,10 @@
   [query results]
   (if (and (= (:type query) :select)
            (not (empty? results)))
-    (let [aliases (zipmap
-                   (:fields query)
-                   (keys (-> query :ent :aliases)))]
+    (let [aliases (into {} (for [f (:fields query)]
+                             (-> (filter
+                                  #(= f (val %)) (-> query :ent :aliases))
+                                 first reverse vec)))]
       (map #(postwalk-replace aliases %) results))))
 
 (defn- update-fields [query fs]
