@@ -169,8 +169,9 @@
   [query results]
   (if (and (= (:type query) :select)
            (not (empty? results)))
-    (let [aliases (into {} (for [field (:fields query)]
-                             [(field (-> query :ent :aliases)) field]))]
+    (let [aliases (zipmap
+                   (:fields query)
+                   (keys (-> query :ent :aliases)))]
       (map #(postwalk-replace aliases %) results))))
 
 (defn- update-fields [query fs]
@@ -394,7 +395,7 @@
 (defn exec
   "Execute a query map and return the results."
   [query]
-  (let [query (-> query unalias-fields apply-prepares)
+  (let [query (-> query apply-prepares)
         query (bind-query query (eng/->sql query))
         sql (:sql-str query)
         params (:params query)]
