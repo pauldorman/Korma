@@ -161,6 +161,8 @@
                  'in 'korma.sql.fns/pred-in
                  '> 'korma.sql.fns/pred->
                  '< 'korma.sql.fns/pred-<
+                 'between 'korma.sql.fns/pred-between
+                 'between! 'korma.sql.fns/pred-between!
                  '>= 'korma.sql.fns/pred->=
                  '<= 'korma.sql.fns/pred-<=
                  'not= 'korma.sql.fns/pred-not=

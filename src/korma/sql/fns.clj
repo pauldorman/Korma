@@ -15,6 +15,12 @@
 (defn pred-< [k v] (infix k "<" v))
 (defn pred->= [k v] (infix k ">=" v))
 (defn pred-<= [k v] (infix k "<=" v))
+(defn pred-between [k vs] (pred-and
+                           (pred->= k (first vs))
+                           (pred-<= k (second vs))))
+(defn pred-between! [k vs] (pred-and
+                            (pred-> k (first vs))
+                            (pred-< k (second vs))))
 (defn pred-like [k v] (infix k "LIKE" v))
 
 (def pred-= eng/pred-=)
