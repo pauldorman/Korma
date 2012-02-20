@@ -220,12 +220,12 @@
   to values. The value can be a vector with one of the above predicate functions 
   describing how the key is related to the value: (where query {:name [like \"chris\"]})"
   [query form]
-  (let [form (unalias-form form query)]
-    `(let [q# ~query]
-       (where* q#
-               (bind-query q#
-                           (eng/pred-map
-                            ~(eng/parse-where `~form)))))))
+  `(let [q# ~query]
+     (where* q#
+             (bind-query q#
+                         `~(eng/pred-map
+                           ~(eng/parse-where
+                             `(unalias-form ~form ~query)))))))
 
 (defn order
   "Add an ORDER BY clause to a select query. field should be a keyword of the field name, dir
