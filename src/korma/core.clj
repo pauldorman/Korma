@@ -172,7 +172,7 @@
     (let [aliases (into {} (for [f (:fields query)]
                              (-> (filter
                                   #(= f (val %)) (-> query :ent :aliases))
-                                 first reverse vec)))]
+                                 first reverse vec not-empty)))]
       (map #(postwalk-replace aliases %) results))))
 
 (defn- update-fields [query fs]
