@@ -12,6 +12,61 @@
 (declare get-rel)
 
 ;;*****************************************************
+;; Field aliases
+;;*****************************************************
+
+(defn unalias-form
+  [form query-or-ent]
+  (binding [*out* *err*]
+    (let [aliases (or (-> query-or-ent :ent :aliases)
+                      (:aliases query-or-ent))
+          out (postwalk-replace aliases form)]
+      out)))
+
+(defn- unalias-field
+  [field aliases]
+  (cond (keyword? field) (or (field aliases) field)
+        (map? field) field
+        (coll? field) (or ((second field) aliases) (first field))
+        :default field))
+
+(defn- unalias-fields
+  [query]
+  (let [fields (-> query :fields)
+        aliases (postwalk-replace
+                 (into {} (filter coll? fields))
+                 (-> query :ent :aliases))]
+    (if (and fields (not-empty aliases))
+      (-> query
+          (assoc-in [:ent :aliases] aliases)
+          (assoc-in [:fields] (map #(unalias-field % aliases) fields)))
+      query)))
+
+
+(defn alias-strs
+  [table aliases]
+  (let [prefix #(str "\"" table "\".\"" (name %) "\"")
+        aliases (into (sorted-map) aliases)]
+    (zipmap (map prefix (keys aliases))
+            (map prefix (vals aliases)))))
+
+(defn unalias-where
+  [query form]
+  (let [table (:table query)
+        aliases (-> query :ent :aliases)
+        str-aliases (alias-strs table aliases)
+        args (:korma.sql.utils/args form)]
+    (postwalk-replace str-aliases form)))
+
+(defn- alias-results
+  [query results]
+  (if (= (:type query) :select)
+    (let [aliases (into (sorted-map) (-> query :ent :aliases))
+          result-aliases (zipmap (vals aliases)
+                                 (keys aliases))] 
+      (map #(postwalk-replace result-aliases %) results))))
+
+;;*****************************************************
 ;; Query types
 ;;*****************************************************
 
@@ -88,8 +143,7 @@
 ;;*****************************************************
 ;; Query macros
 ;;*****************************************************
-
-(defmacro select 
+(defmacro select
   "Creates a select query, applies any modifying functions in the body and then
   executes it. `ent` is either a string or an entity created by defentity.
   
@@ -98,7 +152,7 @@
         (where {:id 2}))"
   [ent & body]
   `(let [query# (-> (select* ~ent)
-                 ~@body)]
+                    ~@body)]
      (exec query#)))
 
 (defmacro update 
@@ -139,41 +193,6 @@
 ;;*****************************************************
 ;; Query parts
 ;;*****************************************************
-
-(defn unalias-form
-  [form query-or-ent]
-  (let [aliases (or (-> query-or-ent :ent :aliases)
-                    (:aliases query-or-ent))]
-    (postwalk-replace aliases form)))
-
-(defn- unalias-field
-  [field aliases]
-  (cond (keyword? field) (or (field aliases) field)
-        (map? field) field
-        (coll? field) (or ((second field) aliases) (first field))
-        :default field))
-
-(defn- unalias-fields
-  [query]
-  (let [fields (-> query :fields)
-        aliases (postwalk-replace
-                 (into {} (filter coll? fields))
-                 (-> query :ent :aliases))]
-    (if (and fields (not-empty aliases))
-      (-> query
-          (assoc-in [:ent :aliases] aliases)
-          (assoc-in [:fields] (map #(unalias-field % aliases) fields)))
-      query)))
-
-(defn- alias-results
-  [query results]
-  (if (and (= (:type query) :select)
-           (not (empty? results)))
-    (let [aliases (into {} (for [f (:fields query)]
-                             (-> (filter
-                                  #(= f (val %)) (-> query :ent :aliases))
-                                 first reverse vec not-empty)))]
-      (map #(postwalk-replace aliases %) results))))
 
 (defn- update-fields [query fs]
   (let [[first-cur] (:fields query)]
@@ -220,12 +239,13 @@
   to values. The value can be a vector with one of the above predicate functions 
   describing how the key is related to the value: (where query {:name [like \"chris\"]})"
   [query form]
-  `(let [q# ~query]
-     (where* q#
-             (bind-query q#
-                         `~(eng/pred-map
-                           ~(eng/parse-where
-                             `(unalias-form ~form ~query)))))))
+  (binding [*out* *err*]
+    `(let [q# ~query]
+       (where* q#
+               (bind-query q#
+                           (unalias-where ~query
+                                          (eng/pred-map
+                                           ~(eng/parse-where `~form))))))))
 
 (defn order
   "Add an ORDER BY clause to a select query. field should be a keyword of the field name, dir

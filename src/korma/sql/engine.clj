@@ -139,7 +139,7 @@
   `(binding [*bound-table* (if (= :select (:type ~query))
                              (table-alias ~query)
                              (:table ~query))
-             *bound-aliases* (or (:aliases ~query) #{})
+             *bound-aliases* (or (:aliases ~query) {})
              *bound-options* (or (:options ~query) @conf/options)]
      ~@body))
 
