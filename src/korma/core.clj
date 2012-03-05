@@ -15,13 +15,10 @@
 ;; Field aliases
 ;;*****************************************************
 
-(defn unalias-form
-  [form query-or-ent]
-  (binding [*out* *err*]
-    (let [aliases (or (-> query-or-ent :ent :aliases)
-                      (:aliases query-or-ent))
-          out (postwalk-replace aliases form)]
-      out)))
+(defn- unalias-form
+  [form query]
+  (let [aliases (-> query :ent :aliases)]
+    (postwalk-replace aliases form)))
 
 (defn- unalias-field
   [field aliases]
@@ -42,26 +39,37 @@
           (assoc-in [:fields] (map #(unalias-field % aliases) fields)))
       query)))
 
-
-(defn alias-strs
-  [table aliases]
-  (let [prefix #(str "\"" table "\".\"" (name %) "\"")
+(defn- arg-aliases
+  [aliases ent]
+  (let [prefix #(eng/prefix ent %)
         aliases (into (sorted-map) aliases)]
     (zipmap (map prefix (keys aliases))
             (map prefix (vals aliases)))))
 
 (defn unalias-where
   [query form]
-  (let [table (:table query)
-        aliases (-> query :ent :aliases)
-        str-aliases (alias-strs table aliases)
+  (let [ent (:ent query)
+        aliases (-> (-> query :ent :aliases) (arg-aliases ent))
         args (:korma.sql.utils/args form)]
-    (postwalk-replace str-aliases form)))
+    (postwalk-replace aliases form)))
+
+(defn- realias-pk
+  [ent]
+  (let [aliases (:aliases ent)]
+    (if-let [primary-key (:pk ent)]
+      (assoc ent :pk (or (:pk aliases) primary-key))
+      ent)))
+
+(defn- realias-fields
+  [ent]
+  (if-let [fields (:fields ent)]
+    (let [aliases (arg-aliases (:aliases ent))]
+      (assoc ent :fields (postwalk-replace aliases fields)))))
 
 (defn- alias-results
   [query results]
   (if (= (:type query) :select)
-    (let [aliases (into (sorted-map) (-> query :ent :aliases))
+    (let [aliases (-> query :ent :aliases)
           result-aliases (zipmap (vals aliases)
                                  (keys aliases))] 
       (map #(postwalk-replace result-aliases %) results))))
@@ -552,24 +560,6 @@
                concat (map #(eng/prefix ent %)
                            (postwalk-replace aliases fields)))))
 
-(defn realias-pk
-  [ent]
-  (let [aliases (:aliases ent)]
-    (if-let [primary-key (:pk ent)]
-      (-> ent (pk (or (:pk aliases) primary-key)))
-      ent)))
-
-(defn realias-fields
-  [ent]
-  (let [aliases (:aliases ent)
-        fields (map
-                #(if (string? %)
-                   (keyword (last (split % #"\""))) %)
-                (:fields ent))]
-    (if-not (empty? fields)
-      (apply entity-fields (dissoc ent :fields) fields)
-      ent)))
-
 (defn aliases
   "Set the default field aliases for the entity. If set, alias names can be used in
    place of actual field names. Aliases can be overridden in select queries with field
@@ -577,10 +567,11 @@
 
    The alias map takes the form {:alias :field}."
   [ent m]
-  (-> ent
-      (update-in [:aliases] merge m)
-      realias-pk
-      realias-fields))
+  (let [m (into (sorted-map) m)]
+    (-> ent
+        (update-in [:aliases] merge m)
+        realias-pk
+        realias-fields)))
 
 (defn table
   "Set the name of the table and an optional alias to be used for the entity. 
