@@ -64,7 +64,8 @@
   [ent]
   (if-let [fields (not-empty (:fields ent))]
     (let [aliases (arg-aliases (:aliases ent))]
-      (assoc ent :fields (postwalk-replace aliases fields)))))
+      (assoc ent :fields (postwalk-replace aliases fields)))
+    ent))
 
 (defn- alias-results
   [query results]
@@ -247,13 +248,12 @@
   to values. The value can be a vector with one of the above predicate functions 
   describing how the key is related to the value: (where query {:name [like \"chris\"]})"
   [query form]
-  (binding [*out* *err*]
-    `(let [q# ~query]
-       (where* q#
-               (bind-query q#
-                           (unalias-where ~query
-                                          (eng/pred-map
-                                           ~(eng/parse-where `~form))))))))
+  `(let [q# ~query]
+     (where* q#
+             (bind-query q#
+                         (unalias-where ~query
+                                        (eng/pred-map
+                                         ~(eng/parse-where `~form)))))))
 
 (defn order
   "Add an ORDER BY clause to a select query. field should be a keyword of the field name, dir
@@ -429,8 +429,11 @@
   "Execute a query map and return the results."
   [query]
   (let [query (-> query apply-prepares)
+        _ (println "exec query:" query)
         query (bind-query query (eng/->sql query))
+        _ (println "exec query:" query)
         sql (:sql-str query)
+        _ (println "exec sql:" sql)
         params (:params query)]
     (cond
       (:sql query) sql
@@ -567,6 +570,8 @@
 
    The alias map takes the form {:alias :field}."
   [ent m]
+  (println "ent:" ent)
+  (println "m:" m)
   (let [m (into (sorted-map) m)]
     (-> ent
         (update-in [:aliases] merge m)
