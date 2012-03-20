@@ -146,7 +146,6 @@
       (catch Exception e (handle-exception e sql params)))))
 
 (defn do-query [query]
-  (println "do-query:" query)
   (let [conn (when-let[db (:db query)]
                (get-connection db))
         cur (or conn (get-connection @_default))
