@@ -429,11 +429,8 @@
   "Execute a query map and return the results."
   [query]
   (let [query (-> query apply-prepares)
-        _ (println "exec query:" query)
         query (bind-query query (eng/->sql query))
-        _ (println "exec query:" query)
         sql (:sql-str query)
-        _ (println "exec sql:" sql)
         params (:params query)]
     (cond
       (:sql query) sql
@@ -570,8 +567,6 @@
 
    The alias map takes the form {:alias :field}."
   [ent m]
-  (println "ent:" ent)
-  (println "m:" m)
   (let [m (into (sorted-map) m)]
     (-> ent
         (update-in [:aliases] merge m)
