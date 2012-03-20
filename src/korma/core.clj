@@ -62,7 +62,7 @@
 
 (defn- realias-fields
   [ent]
-  (if-let [fields (:fields ent)]
+  (if-let [fields (not-empty (:fields ent))]
     (let [aliases (arg-aliases (:aliases ent))]
       (assoc ent :fields (postwalk-replace aliases fields)))))
 
